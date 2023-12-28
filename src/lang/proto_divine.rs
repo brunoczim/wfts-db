@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! proto_divine_morpheme {
-    [$($phoneme:expr),*] => {{
+    ($($phoneme:expr),*) => {{
         #[allow(unused_imports)]
         use $crate::lang::proto_divine::{
             Vowel::*,
@@ -11,23 +11,23 @@ macro_rules! proto_divine_morpheme {
         };
         Morpheme::from_phoneme_seq([$($phoneme.into()),*]).unwrap()
     }};
-    [$($phoneme:expr,)*] => { $crate::proto_divine_morpheme![$($phoneme),*] };
+    ($($phoneme:expr,)*) => { $crate::proto_divine_morpheme!($($phoneme),*) };
 }
 
 #[macro_export]
 macro_rules! proto_divine_word {
     {
-        { $([$($prefix:tt)*]),* },
-        [$($nucleus:tt),*],
-        { $([$($sufix:tt)*]),* } $(,)?
-    } => {
+        [ $(($($prefix:tt)*)),* ],
+        ($($stem:tt)*),
+        [ $(($($suffix:tt)*)),* ] $(,)?
+    } => {{
         use $crate::lang::proto_divine::Word;
         Word {
-            prefixes: vec![$($crate::proto_divine_morpheme![$($prefix)*]),*],
-            nucleus: $crate::proto_divine_morpheme![$($prefix)*],
-            suffixes: vec![$($crate::proto_divine_morpheme![$($prefix)*]),*],
-        },
-    };
+            prefixes: vec![$($crate::proto_divine_morpheme!($($prefix)*)),*],
+            stem: $crate::proto_divine_morpheme!($($stem)*),
+            suffixes: vec![$($crate::proto_divine_morpheme!($($suffix)*)),*],
+        }
+    }};
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -221,11 +221,12 @@ mod test {
         Onset,
         Sonorant,
         Vowel,
+        Word,
     };
 
     #[test]
     fn morpheme_macro_correct_only_vowel() {
-        let morpheme = proto_divine_morpheme![A];
+        let morpheme = proto_divine_morpheme!(A);
         assert_eq!(
             morpheme,
             Morpheme {
@@ -238,7 +239,7 @@ mod test {
 
     #[test]
     fn morpheme_macro_correct_full() {
-        let morpheme = proto_divine_morpheme![P, L, E, J];
+        let morpheme = proto_divine_morpheme!(P, L, E, J);
         assert_eq!(
             morpheme,
             Morpheme {
@@ -254,7 +255,7 @@ mod test {
 
     #[test]
     fn morpheme_macro_correct_no_coda() {
-        let morpheme = proto_divine_morpheme![T, N, Ao];
+        let morpheme = proto_divine_morpheme!(T, N, Ao);
         assert_eq!(
             morpheme,
             Morpheme {
@@ -270,7 +271,7 @@ mod test {
 
     #[test]
     fn morpheme_macro_correct_no_onset() {
-        let morpheme = proto_divine_morpheme![I, M];
+        let morpheme = proto_divine_morpheme!(I, M);
         assert_eq!(
             morpheme,
             Morpheme {
@@ -283,7 +284,7 @@ mod test {
 
     #[test]
     fn morpheme_macro_correct_no_sonorant() {
-        let morpheme = proto_divine_morpheme![S, O];
+        let morpheme = proto_divine_morpheme!(S, O);
         assert_eq!(
             morpheme,
             Morpheme {
@@ -299,7 +300,7 @@ mod test {
 
     #[test]
     fn morpheme_macro_correct_no_obstruent() {
-        let morpheme = proto_divine_morpheme![Ng, U];
+        let morpheme = proto_divine_morpheme!(Ng, U);
         assert_eq!(
             morpheme,
             Morpheme {
@@ -316,42 +317,199 @@ mod test {
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_empty() {
-        let _ = proto_divine_morpheme![];
+        let _ = proto_divine_morpheme!();
     }
 
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_multi_nuclei() {
-        let _ = proto_divine_morpheme![A, P, A];
+        let _ = proto_divine_morpheme!(A, P, A);
     }
 
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_onset_too_long() {
-        let _ = proto_divine_morpheme![K, X, M, O];
+        let _ = proto_divine_morpheme!(K, X, M, O);
     }
 
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_onset_too_many_obst() {
-        let _ = proto_divine_morpheme![K, X, O];
+        let _ = proto_divine_morpheme!(K, X, O);
     }
 
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_onset_bad_order() {
-        let _ = proto_divine_morpheme![L, X, O];
+        let _ = proto_divine_morpheme!(L, X, O);
     }
 
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_coda_too_long() {
-        let _ = proto_divine_morpheme![O, J, S];
+        let _ = proto_divine_morpheme!(O, J, S);
     }
 
     #[test]
     #[should_panic]
     fn morpheme_macro_incorrect_no_nucleus() {
-        let _ = proto_divine_morpheme![S, J];
+        let _ = proto_divine_morpheme!(S, J);
+    }
+
+    #[test]
+    fn word_macro_correct_monosyllabic() {
+        let word = proto_divine_word! { [], (K, E, W), [] };
+        assert_eq!(
+            word,
+            Word {
+                prefixes: Vec::new(),
+                stem: Morpheme {
+                    onset: Onset {
+                        initial: Some(Obstruent::K.into()),
+                        medial: None
+                    },
+                    nucleus: Vowel::E.into(),
+                    coda: Some(Sonorant::W.into()),
+                },
+                suffixes: Vec::new(),
+            },
+        );
+    }
+
+    #[test]
+    fn word_macro_correct_prefixed() {
+        let word = proto_divine_word! { [(A), (S, I)], (K, E, W), [] };
+        assert_eq!(
+            word,
+            Word {
+                prefixes: vec![
+                    Morpheme {
+                        onset: Onset { initial: None, medial: None },
+                        nucleus: Vowel::A.into(),
+                        coda: None
+                    },
+                    Morpheme {
+                        onset: Onset {
+                            initial: Some(Obstruent::S.into()),
+                            medial: None
+                        },
+                        nucleus: Vowel::I.into(),
+                        coda: None
+                    },
+                ],
+                stem: Morpheme {
+                    onset: Onset {
+                        initial: Some(Obstruent::K.into()),
+                        medial: None
+                    },
+                    nucleus: Vowel::E.into(),
+                    coda: Some(Sonorant::W.into()),
+                },
+                suffixes: Vec::new(),
+            },
+        );
+    }
+
+    #[test]
+    fn word_macro_correct_suffixed() {
+        let word =
+            proto_divine_word! { [], (K, E, W), [(U, T), (T, O, Ng), (M, A)] };
+        assert_eq!(
+            word,
+            Word {
+                prefixes: Vec::new(),
+                stem: Morpheme {
+                    onset: Onset {
+                        initial: Some(Obstruent::K.into()),
+                        medial: None
+                    },
+                    nucleus: Vowel::E.into(),
+                    coda: Some(Sonorant::W.into()),
+                },
+                suffixes: vec![
+                    Morpheme {
+                        onset: Onset { initial: None, medial: None },
+                        nucleus: Vowel::U.into(),
+                        coda: Some(Obstruent::T.into())
+                    },
+                    Morpheme {
+                        onset: Onset {
+                            initial: Some(Obstruent::T.into()),
+                            medial: None
+                        },
+                        nucleus: Vowel::O.into(),
+                        coda: Some(Sonorant::Ng.into())
+                    },
+                    Morpheme {
+                        onset: Onset {
+                            initial: None,
+                            medial: Some(Sonorant::M.into()),
+                        },
+                        nucleus: Vowel::A.into(),
+                        coda: None,
+                    },
+                ],
+            },
+        );
+    }
+
+    #[test]
+    fn word_macro_correct_surrounded() {
+        let word = proto_divine_word! {
+            [(A), (S, I)],
+            (K, E, W),
+            [(U, T), (T, O, Ng), (M, A)],
+        };
+        assert_eq!(
+            word,
+            Word {
+                prefixes: vec![
+                    Morpheme {
+                        onset: Onset { initial: None, medial: None },
+                        nucleus: Vowel::A.into(),
+                        coda: None
+                    },
+                    Morpheme {
+                        onset: Onset {
+                            initial: Some(Obstruent::S.into()),
+                            medial: None
+                        },
+                        nucleus: Vowel::I.into(),
+                        coda: None
+                    },
+                ],
+                stem: Morpheme {
+                    onset: Onset {
+                        initial: Some(Obstruent::K.into()),
+                        medial: None
+                    },
+                    nucleus: Vowel::E.into(),
+                    coda: Some(Sonorant::W.into()),
+                },
+                suffixes: vec![
+                    Morpheme {
+                        onset: Onset { initial: None, medial: None },
+                        nucleus: Vowel::U.into(),
+                        coda: Some(Obstruent::T.into())
+                    },
+                    Morpheme {
+                        onset: Onset {
+                            initial: Some(Obstruent::T.into()),
+                            medial: None
+                        },
+                        nucleus: Vowel::O.into(),
+                        coda: Some(Sonorant::Ng.into())
+                    },
+                    Morpheme {
+                        onset: Onset {
+                            initial: None,
+                            medial: Some(Sonorant::M.into()),
+                        },
+                        nucleus: Vowel::A.into(),
+                        coda: None,
+                    },
+                ],
+            },
+        );
     }
 }
